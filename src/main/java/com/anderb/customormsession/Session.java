@@ -1,7 +1,7 @@
 package com.anderb.customormsession;
 
-import com.anderb.customormsession.annotation.Id;
 import com.anderb.customormsession.annotation.Column;
+import com.anderb.customormsession.annotation.Id;
 import com.anderb.customormsession.annotation.Table;
 import lombok.RequiredArgsConstructor;
 

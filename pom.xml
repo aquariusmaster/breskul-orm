@@ -4,9 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.example</groupId>
-    <artifactId>hiber-connect-test</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <groupId>org.anderb</groupId>
+    <artifactId>custom-orm-session</artifactId>
+    <version>0.1.0</version>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
@@ -18,6 +18,11 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.22</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.aquariusmaster</groupId>
+            <artifactId>breskul-cp</artifactId>
+            <version>master-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -49,6 +54,19 @@
             <version>42.3.1</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>1.4.200</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
 
 </project>
