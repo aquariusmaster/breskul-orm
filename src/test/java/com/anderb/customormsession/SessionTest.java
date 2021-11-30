@@ -2,17 +2,22 @@ package com.anderb.customormsession;
 
 import com.anderb.breskulcp.BreskulCPDataSource;
 import com.anderb.breskulcp.DataSourceConfigs;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.sql.SQLException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.*;
 
 class SessionTest {
 
-    private static SessionFactory factory;
+    private SessionFactory subject;
+    private BreskulCPDataSource spyDataSource;
 
-    @BeforeAll
-    static void setUp() throws Exception {
+    @BeforeEach
+    void setUp() throws Exception {
         DataSourceConfigs configs = DataSourceConfigs.builder()
                 .jdbcUrl("jdbc:h2:mem:testdb")
                 .username("sa")
@@ -21,19 +26,30 @@ class SessionTest {
                 .poolSize(15)
                 .connectionTimeout(60_000)
                 .build();
-        BreskulCPDataSource breskulCPDataSource = new BreskulCPDataSource(configs);
-        prepareDB(breskulCPDataSource);
-        factory = new SessionFactory(breskulCPDataSource);
+        spyDataSource = new BreskulCPDataSource(configs);
+        prepareDB(spyDataSource);
+        spyDataSource = spy(spyDataSource);
+        subject = new SessionFactory(spyDataSource);
 
     }
 
     @Test
     void find_whenPersonWithGivenIdExists_shouldFindAndCreatePersonInstance() {
-        Session session = factory.createSession();
+        Session session = subject.createSession();
         Person person = session.find(Person.class, 1L);
         assertEquals(1L, person.getId());
         assertEquals("Andrii", person.getFirstName());
         assertEquals("Bobrov", person.getLastName());
+    }
+
+    @Test
+    void find_whenEntityAlreadyInCache_shouldNotCallDB() throws SQLException {
+        Session session = subject.createSession();
+        Person person = session.find(Person.class, 2L);
+        Person person2 = session.find(Person.class, 2L);
+        assertNotNull(person);
+        assertNotNull(person2);
+        verify(spyDataSource, times(1)).getConnection();
     }
 
     private static void prepareDB(BreskulCPDataSource dataSource) throws Exception {
