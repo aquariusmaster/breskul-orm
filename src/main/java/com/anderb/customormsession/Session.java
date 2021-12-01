@@ -3,6 +3,7 @@ package com.anderb.customormsession;
 import com.anderb.customormsession.annotation.Column;
 import com.anderb.customormsession.annotation.Id;
 import com.anderb.customormsession.annotation.Table;
+import com.anderb.customormsession.exception.OrmException;
 import lombok.RequiredArgsConstructor;
 
 import javax.sql.DataSource;
@@ -11,42 +12,90 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.anderb.customormsession.EntityKey.of;
+import static java.util.Comparator.comparing;
+import static java.util.stream.Collectors.toMap;
 
 @RequiredArgsConstructor
-public class Session {
+public class Session implements AutoCloseable {
     private static final String FIND_SQL = "SELECT * FROM %s WHERE %s=?";
+    private static final String UPDATE_SQL = "UPDATE %s SET %s WHERE %s=?";
 
     private final DataSource dataSource;
-
-    private final Map<EntityKey, Object> cache = new HashMap<>();
+    private final Map<EntityKey, Object[]> snapshots = new HashMap<>();
+    private final Map<EntityKey, Object> persistenceContext = new HashMap<>();
+    private boolean isReadOnly;
+    private boolean closed;
 
     public <T> T find(Class<T> type, Object id) {
-        Object entity = cache.computeIfAbsent(of(id, type), this::loadFromDB);
+        checkOpen();
+        Object entity = persistenceContext.computeIfAbsent(of(id, type), this::loadFromDatasource);
         return type.cast(entity);
     }
 
-    private <T> T loadFromDB(EntityKey key) {
+    public void close() {
+        closed = true;
+        persistenceContext
+                .entrySet()
+                .stream()
+                .filter(entry -> snapshots.containsKey(entry.getKey()))
+                .forEach(entry -> {
+                    var entityFields = getEntityFields(entry.getKey().getType());
+                    var currentState = toSnapshot(entry.getValue(), entityFields);
+                    if (isDirty(snapshots.get(entry.getKey()), currentState)) {
+                        executeUpdate(entry.getKey(), currentState, entityFields);
+                    }
+                });
+        persistenceContext.clear();
+    }
+
+    public void setReadOnly(boolean readOnly) {
+        isReadOnly = readOnly;
+    }
+
+    public boolean isClosed() {
+        return closed;
+    }
+
+    private void checkOpen() {
+        if (isClosed()) {
+            throw new IllegalStateException("Session is closed");
+        }
+    }
+
+    private <T> T loadFromDatasource(EntityKey key) {
         Class<T> type = (Class<T>) key.getType();
-        Map<String, Field> fields = getEntityFields(type);
+        LinkedHashMap<String, Field> fields = getEntityFields(type);
 
         try (Connection connection = dataSource.getConnection()) {
             PreparedStatement stm = prepareFindByIdStatement(connection, key, fields);
             ResultSet resultSet = stm.executeQuery();
-            return mapToEntity(resultSet, fields, type);
+            T entity = mapToEntity(resultSet, fields, type);
+            saveStateToSnapshotIfNeeded(key, entity, fields);
+            return entity;
         } catch (Exception e) {
-            throw new RuntimeException("Error", e);
+            throw new OrmException("Cannot load entity from DB", e);
         }
     }
 
-    private <T> PreparedStatement prepareFindByIdStatement(Connection connection, EntityKey key, Map<String, Field> fields) throws SQLException {
+    private <T> void saveStateToSnapshotIfNeeded(EntityKey key, T entity, LinkedHashMap<String, Field> fields) {
+        if (!isReadOnly) {
+            saveStateToSnapshot(key, entity, fields);
+        }
+    }
+
+    private <T> PreparedStatement prepareFindByIdStatement(Connection connection, EntityKey key, LinkedHashMap<String, Field> fields) throws SQLException {
         PreparedStatement stm = connection.prepareStatement(
                 String.format(
                         FIND_SQL,
-                        key.getType().getAnnotation(Table.class).value(),
+                        getTableName(key.getType()),
                         getIdColumnName(fields)
                 )
         );
@@ -54,30 +103,20 @@ public class Session {
         return stm;
     }
 
-    private Map<String, Field> getEntityFields(Class<?> type) {
-        Map<String, Field> fields = new HashMap<>();
-        for (Field field : type.getDeclaredFields()) {
-            if (field.isAnnotationPresent(Id.class)) {
-                Id id = field.getAnnotation(Id.class);
-                if (id.value().isEmpty()) {
-                    fields.put(field.getName(), field);
-                } else {
-                    fields.put(id.value(), field);
-                }
-            } else
-            if (field.isAnnotationPresent(Column.class)) {
-                Column column = field.getAnnotation(Column.class);
-                if (column.value().isEmpty()) {
-                    fields.put(field.getName(), field);
-                } else {
-                    fields.put(column.value(), field);
-                }
-            }
-        }
-        return fields;
+    private LinkedHashMap<String, Field> getEntityFields(Class<?> type) {
+        return Arrays.stream(type.getDeclaredFields())
+                .filter(field -> field.isAnnotationPresent(Id.class) || field.isAnnotationPresent(Column.class))
+                .sorted(comparing(Field::getName))
+                .collect(toMap(
+                        this::getFieldName,
+                        Function.identity(),
+                        (u, v) -> {
+                            throw new IllegalStateException(String.format("Duplicate field name %s", u));
+                        },
+                        LinkedHashMap::new));
     }
 
-    private String getIdColumnName(Map<String, Field> fields) {
+    private String getIdColumnName(LinkedHashMap<String, Field> fields) {
         return fields.entrySet().stream()
                 .filter(entry -> entry.getValue().isAnnotationPresent(Id.class))
                 .map(Map.Entry::getKey)
@@ -85,7 +124,7 @@ public class Session {
                 .orElseThrow(() -> new IllegalStateException("Cannot find @Id annotation for entity"));
     }
 
-    private <T> T mapToEntity(ResultSet resultSet, Map<String, Field> fields, Class<T> type) throws Exception {
+    private <T> T mapToEntity(ResultSet resultSet, LinkedHashMap<String, Field> fields, Class<T> type) throws Exception {
         if (!resultSet.next()) {
             return null;
         }
@@ -97,4 +136,92 @@ public class Session {
         }
         return instance;
     }
+
+    private <T> void saveStateToSnapshot(EntityKey key, T entity, LinkedHashMap<String, Field> fields) {
+        Object[] state = toSnapshot(entity, fields);
+        snapshots.put(key, state);
+    }
+
+    private <T> Object[] toSnapshot(T entity, LinkedHashMap<String, Field> fields) {
+        return fields.values()
+                .stream()
+                .filter(field -> !field.getName().equals(getIdColumnName(fields)))
+                .map(field -> {
+                    try {
+                        field.setAccessible(true);
+                        return field.get(entity);
+                    } catch (IllegalAccessException e) {
+                        throw new OrmException("Cannot get entity state", e);
+                    }
+                }).toArray();
+
+    }
+
+    private boolean isDirty(Object[] previousState, Object[] currentState) {
+        for (int i = 0; i < previousState.length; i++) {
+            if (!previousState[i].equals(currentState[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void executeUpdate(EntityKey key, Object[] currentState, LinkedHashMap<String, Field> entityFields) {
+        try (Connection connection = dataSource.getConnection()) {
+            PreparedStatement stm = prepareUpdateStatement(connection, key, currentState, entityFields);
+            int rowsUpdated = stm.executeUpdate();
+            if (rowsUpdated != 1) {
+                throw new OrmException("Cannot update entity " + key);
+            }
+        } catch (Exception e) {
+            throw new OrmException("Error", e);
+        }
+    }
+
+    private <T> PreparedStatement prepareUpdateStatement(Connection connection,
+                                                         EntityKey key,
+                                                         Object[] currentState,
+                                                         LinkedHashMap<String, Field> fields) throws SQLException {
+        String idColumnName = getIdColumnName(fields);
+        String setValues = fields.keySet()
+                .stream()
+                .filter(field -> !field.equals(idColumnName))
+                .collect(Collectors.joining("=?, ", "", "=?"));
+        String sql = String.format(
+                UPDATE_SQL,
+                getTableName(key.getType()),
+                setValues,
+                idColumnName
+        );
+        PreparedStatement stm = connection.prepareStatement(sql);
+        int i = 1;
+        for (; i <= currentState.length; i++) {
+            stm.setObject(i, currentState[i - 1]);
+        }
+        stm.setObject(i, key.getId());
+        return stm;
+    }
+
+    private String getFieldName(Field field) {
+        if (field.isAnnotationPresent(Id.class)) {
+            Id id = field.getAnnotation(Id.class);
+            if (id.value().isEmpty()) {
+                return field.getName();
+            }
+            return id.value();
+        }
+        Column column = field.getAnnotation(Column.class);
+        if (column.value().isEmpty()) {
+            return field.getName();
+        }
+        return column.value();
+    }
+
+    private String getTableName(Class<?> type) {
+        if (type.isAnnotationPresent(Table.class)) {
+            return type.getAnnotation(Table.class).value();
+        }
+        throw new OrmException("Table annotation does not exists for entity: " + type);
+    }
+
 }

@@ -52,6 +52,18 @@ class SessionTest {
         verify(spyDataSource, times(1)).getConnection();
     }
 
+    @Test
+    void close_whenSessionClosing_shouldUpdateEntityInDB() {
+        Session session = subject.createSession();
+        Person person = session.find(Person.class, 3L);
+        person.setFirstName("Changed");
+        session.close();
+        Session session2 = subject.createSession();
+        Person person2 = session2.find(Person.class, 3L);
+        assertEquals("Changed", person2.getFirstName());
+        session2.close();
+    }
+
     private static void prepareDB(BreskulCPDataSource dataSource) throws Exception {
         try (var conn = dataSource.getConnection();
              var stm = conn.createStatement();
