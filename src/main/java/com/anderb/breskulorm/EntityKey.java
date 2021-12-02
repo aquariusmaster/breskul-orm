@@ -1,4 +1,4 @@
-package com.anderb.customormsession;
+package com.anderb.breskulorm;
 
 import lombok.Data;
 

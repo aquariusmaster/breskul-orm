@@ -1,4 +1,4 @@
-package com.anderb.customormsession.exception;
+package com.anderb.breskulorm.exception;
 
 public class OrmException extends RuntimeException {
 

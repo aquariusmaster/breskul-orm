@@ -1,4 +1,4 @@
-package com.anderb.customormsession;
+package com.anderb.breskulorm;
 
 import com.anderb.breskulcp.BreskulCPDataSource;
 import com.anderb.breskulcp.DataSourceConfigs;

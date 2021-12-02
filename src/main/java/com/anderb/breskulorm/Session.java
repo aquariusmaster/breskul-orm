@@ -1,9 +1,9 @@
-package com.anderb.customormsession;
+package com.anderb.breskulorm;
 
-import com.anderb.customormsession.annotation.Column;
-import com.anderb.customormsession.annotation.Id;
-import com.anderb.customormsession.annotation.Table;
-import com.anderb.customormsession.exception.OrmException;
+import com.anderb.breskulorm.annotation.Column;
+import com.anderb.breskulorm.annotation.Id;
+import com.anderb.breskulorm.annotation.Table;
+import com.anderb.breskulorm.exception.OrmException;
 import lombok.RequiredArgsConstructor;
 
 import javax.sql.DataSource;
@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.anderb.customormsession.EntityKey.of;
+import static com.anderb.breskulorm.EntityKey.of;
 import static java.util.Comparator.comparing;
 import static java.util.stream.Collectors.toMap;
 

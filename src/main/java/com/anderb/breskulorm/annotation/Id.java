@@ -1,4 +1,4 @@
-package com.anderb.customormsession.annotation;
+package com.anderb.breskulorm.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

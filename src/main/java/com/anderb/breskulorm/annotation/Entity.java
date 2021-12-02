@@ -1,12 +1,11 @@
-package com.anderb.customormsession.annotation;
+package com.anderb.breskulorm.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Target(ElementType.FIELD)
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface Column {
-    String value() default "";
+public @interface Entity {
 }
