@@ -42,6 +42,11 @@ public class Session implements AutoCloseable {
 
     public void close() {
         closed = true;
+        flush();
+        persistenceContext.clear();
+    }
+
+    public void flush() {
         persistenceContext
                 .entrySet()
                 .stream()
@@ -53,7 +58,7 @@ public class Session implements AutoCloseable {
                         executeUpdate(entry.getKey(), currentState, entityFields);
                     }
                 });
-        persistenceContext.clear();
+        snapshots.clear();
     }
 
     public void setReadOnly(boolean readOnly) {
