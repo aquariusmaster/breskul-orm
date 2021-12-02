@@ -1,14 +1,17 @@
 package com.anderb.breskulorm;
 
-import lombok.RequiredArgsConstructor;
-
 import javax.sql.DataSource;
 
-@RequiredArgsConstructor
 public class SessionFactory {
     private final DataSource dataSource;
+    private final EntityMetadataResolver entityMetadataResolver;
+
+    public SessionFactory(DataSource dataSource, Class<?>... entityClasses) {
+        this.dataSource = dataSource;
+        entityMetadataResolver = new EntityMetadataResolver(entityClasses);
+    }
 
     public Session createSession() {
-        return new Session(dataSource);
+        return new Session(dataSource, entityMetadataResolver);
     }
 }

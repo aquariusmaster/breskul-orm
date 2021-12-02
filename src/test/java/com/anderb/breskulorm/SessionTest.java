@@ -29,7 +29,7 @@ class SessionTest {
         spyDataSource = new BreskulCPDataSource(configs);
         prepareDB(spyDataSource);
         spyDataSource = spy(spyDataSource);
-        subject = new SessionFactory(spyDataSource);
+        subject = new SessionFactory(spyDataSource, Person.class);
 
     }
 

@@ -4,18 +4,18 @@ import lombok.Data;
 
 @Data
 public class EntityKey {
-    private final Object id;
-    private final Class<?> type;
+    private final Object identifier;
+    private final EntityMetadata metadata;
 
-    public static EntityKey of(Object id, Class<?> type) {
-        return new EntityKey(id, type);
+    public static EntityKey of(Object id, EntityMetadata metadata) {
+        return new EntityKey(id, metadata);
     }
 
     @Override
     public String toString() {
         return "Entity{" +
-                "id=" + id +
-                ", type=" + type +
+                "id=" + identifier +
+                ", type=" + metadata.getType() +
                 '}';
     }
 }
