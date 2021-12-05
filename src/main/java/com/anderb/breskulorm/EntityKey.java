@@ -1,13 +1,19 @@
 package com.anderb.breskulorm;
 
-import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+import java.io.Serializable;
+
+@Getter
+@Setter
+@AllArgsConstructor
 public class EntityKey {
-    private final Object identifier;
+    private final Serializable identifier;
     private final EntityMetadata metadata;
 
-    public static EntityKey of(Object id, EntityMetadata metadata) {
+    public static EntityKey of(Serializable id, EntityMetadata metadata) {
         return new EntityKey(id, metadata);
     }
 

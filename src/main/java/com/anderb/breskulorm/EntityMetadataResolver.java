@@ -1,6 +1,7 @@
 package com.anderb.breskulorm;
 
 import com.anderb.breskulorm.annotation.Column;
+import com.anderb.breskulorm.annotation.GenerationType;
 import com.anderb.breskulorm.annotation.Id;
 import com.anderb.breskulorm.annotation.Table;
 import com.anderb.breskulorm.exception.OrmException;
@@ -10,6 +11,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static com.anderb.breskulorm.annotation.GenerationType.IDENTITY;
 import static java.util.Comparator.comparing;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.joining;
@@ -18,6 +20,7 @@ import static java.util.stream.Collectors.toMap;
 public class EntityMetadataResolver {
 
     private final Map<Class<?>, EntityMetadata> metadataMap;
+    private final EntityPersister entityPersister = new EntityPersister();
 
     public EntityMetadataResolver(Class<?>... entityClasses) {
         metadataMap = Arrays.stream(entityClasses)
@@ -34,14 +37,35 @@ public class EntityMetadataResolver {
     public EntityMetadata generateEntityMetadata(Class<?> entityClass) {
         var fields = getEntityFields(entityClass);
         String idColumnName = getIdColumnName(fields);
+        Field idField = getIdField(fields, entityClass);
+        GenerationType idGenerationType = getIdGenerationType(idField);
         return EntityMetadata
                 .builder()
                 .type(entityClass)
                 .idColumnName(idColumnName)
                 .tableName(getTableName(entityClass))
                 .fields(fields)
-                .updateSetValue(getUpdateSetValue(fields, idColumnName))
+                .idField(idField)
+                .updateSetValueSql(getUpdateSetValue(fields, idColumnName))
+                .insertSetValueSql(getInsertSetValue(fields, idColumnName, idGenerationType == IDENTITY))
+                .persister(entityPersister)
+                .idGenerationType(idGenerationType)
                 .build();
+    }
+
+    private GenerationType getIdGenerationType(Field idField) {
+        return idField.getAnnotation(Id.class).generatedValue();
+    }
+
+    private Field getIdField(LinkedHashMap<String, Field> fields, Class<?> type) {
+        return fields
+                .values()
+                .stream()
+                .filter(field -> field.isAnnotationPresent(Id.class))
+                .findFirst()
+                .orElseThrow(
+                        () -> new IllegalStateException(String.format("Entity %s has not @Id field annotation", type))
+                );
     }
 
     private LinkedHashMap<String, Field> getEntityFields(Class<?> type) {
@@ -92,6 +116,17 @@ public class EntityMetadataResolver {
                 .stream()
                 .filter(fieldName -> !fieldName.equals(idColumnName))
                 .collect(joining("=?, ", "", "=?"));
+    }
+
+    private String getInsertSetValue(LinkedHashMap<String, Field> fields, String idColumnName, boolean excludeId) {
+        var valuesWithoutId = fields.keySet()
+                .stream()
+                .filter(fieldName -> !fieldName.equals(idColumnName))
+                .collect(joining(", "));
+        if (excludeId) {
+            return valuesWithoutId;
+        }
+        return valuesWithoutId + ", " + idColumnName;
     }
 
 }
