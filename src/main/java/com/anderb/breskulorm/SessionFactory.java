@@ -1,6 +1,9 @@
 package com.anderb.breskulorm;
 
+import com.anderb.breskulorm.exception.OrmException;
+
 import javax.sql.DataSource;
+import java.sql.SQLException;
 
 public class SessionFactory {
     private final DataSource dataSource;
@@ -12,6 +15,10 @@ public class SessionFactory {
     }
 
     public Session createSession() {
-        return new Session(dataSource, entityMetadataResolver);
+        try {
+            return new Session(dataSource.getConnection(), entityMetadataResolver);
+        } catch (SQLException e) {
+            throw new OrmException("Cannot create new Session", e);
+        }
     }
 }
